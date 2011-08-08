@@ -312,7 +312,7 @@ class AttributeConverter:
 class Svg2RlgAttributeConverter(AttributeConverter):
     "A concrete SVG to RLG attribute converter."
 
-    def convertLength(self, svgAttr, percentOf=100):
+    def convertLength(self, svgAttr, percentOf=100, emSize=None):
         "Convert length to points."
 
         text = svgAttr
@@ -325,6 +325,8 @@ class Svg2RlgAttributeConverter(AttributeConverter):
             return float(text[:-1]) / 100 * percentOf
         elif text[-2:] == "pc":
             return float(text[:-2]) * pica
+        elif emSize and text[-2:] == 'em':
+            return float(text[:-2]) * emSize
 
         newSize = text[:]
         for u in "em ex px".split():
