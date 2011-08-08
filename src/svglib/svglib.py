@@ -808,58 +808,54 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
     def convertText(self, node):
         attrConv = self.attrConverter
         getAttr = node.getAttribute
-        x, y = map(getAttr, ('x', 'y'))
-        x, y = map(attrConv.convertLength, (x, y))
-
+        x0 = attrConv.convertLength( getAttr('x') )
+        y0 = attrConv.convertLength( getAttr('y') )
         gr = Group()
 
         text = ''
-        chNum = len(node.childNodes)
-        frags = []
         fragLengths = []
 
-        dx0, dy0 = 0, 0
-        x1, y1 = 0, 0
-        ff = attrConv.findAttr(node, "font-family") or "Helvetica"
-        ff = ff.encode("ASCII")
-        ff = attrConv.convertFontFamily(ff)
-        fs = attrConv.findAttr(node, "font-size") or "12"
-        fs = fs.encode("ASCII")
-        fs = attrConv.convertLength(fs)
+        ffamily = attrConv.findAttr(node, "font-family").encode("ASCII") or "Helvetica"
+        ffamily = attrConv.convertFontFamily(ffamily)
+        fsize = attrConv.findAttr(node, "font-size").encode("ASCII") or "12"
+        fsize = attrConv.convertLength(fsize)
+
+        baseLines = { "sub":-fsize/2, "super":fsize/2, "baseline":0 }
+
+        dx0 = attrConv.convertLength( getAttr('dx'), emSize=fsize )
+        dy0 = attrConv.convertLength( getAttr('dy'), emSize=fsize )
+
         for c in node.childNodes:
             dx, dy = 0, 0
+            x, y = 0, 0
             baseLineShift = 0
+
             if c.nodeType == c.TEXT_NODE:
-                frags.append(c.nodeValue)
-                try:
-                    tx = ''.join([chr(ord(f)) for f in frags[-1]])
-                except ValueError:
-                    tx = "Unicode"
+                text = c.nodeValue
+
             elif c.nodeType == c.ELEMENT_NODE and c.nodeName == "tspan":
-                frags.append(c.firstChild.nodeValue)
-                tx = ''.join([chr(ord(f)) for f in frags[-1]])
-                getAttr = c.getAttribute
-                y1 = getAttr('y')
-                y1 = attrConv.convertLength(y1)
-                dx, dy = map(getAttr, ("dx", "dy"))
-                dx, dy = map(attrConv.convertLength, (dx, dy))
-                dx0 = dx0 + dx
-                dy0 = dy0 + dy
-                baseLineShift = getAttr("baseline-shift") or '0'
-                if baseLineShift in ("sub", "super", "baseline"):
-                    baseLineShift = {"sub":-fs/2, "super":fs/2, "baseline":0}[baseLineShift]
-                else:
-                    baseLineShift = attrConv.convertLength(baseLineShift, fs)
+                text = c.firstChild.nodeValue
+                y = attrConv.convertLength( c.getAttribute('y'), emSize=fsize )
+                x = attrConv.convertLength( c.getAttribute('x'), emSize=fsize )
+                dx += attrConv.convertLength( c.getAttribute('dx'), emSize=fsize )
+                dy += attrConv.convertLength( c.getAttribute('dy'), emSize=fsize )
+                baseLineShift = c.getAttribute("baseline-shift") or 0
+                if baseLineShift in baseLines:
+                    baseLineShift = baseLines[baseLineShift]
+                elif baseLineShift:
+                    baseLineShift = attrConv.convertLength(baseLineShift, fsize, emSize=fsize)
+
             elif c.nodeType == c.ELEMENT_NODE and c.nodeName != "tspan":
                 continue
 
-            fragLengths.append(stringWidth(tx, ff, fs))
-            rl = reduce(operator.__add__, fragLengths[:-1], 0)
-            try:
-                text = ''.join([chr(ord(f)) for f in frags[-1]])
-            except ValueError:
-                text = "Unicode"
-            shape = String(x+rl, y-y1-dy0+baseLineShift, text)
+            text = unicode(text).strip()
+            shape = String(
+                (x0 + x) - (dx0 + dx) + sum(fragLengths),
+                (y0 + y) - (dy0 + dy) + baseLineShift,
+                text
+            )
+            fragLengths.append(stringWidth(text, ffamily, fsize))
+
             self.applyStyleOnShape(shape, node)
             if c.nodeType == c.ELEMENT_NODE and c.nodeName == "tspan":
                 self.applyStyleOnShape(shape, c)
@@ -867,7 +863,7 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
             gr.add(shape)
 
         gr.scale(1, -1)
-        gr.translate(0, -2*y)
+        gr.translate(0, -2*y0)
 
         return gr
 
