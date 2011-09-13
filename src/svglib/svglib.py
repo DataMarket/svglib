@@ -353,7 +353,7 @@ class Svg2RlgAttributeConverter(AttributeConverter):
         return a
 
 
-    def convertColor(self, svgAttr):
+    def convertColor(self, svgAttr, alpha=1):
         "Convert string to a RL color object."
 
         # fix it: most likely all "web colors" are allowed
@@ -371,15 +371,17 @@ class Svg2RlgAttributeConverter(AttributeConverter):
             text = text.encode("ASCII")
         except:
             pass
+        
+        ret = None
 
         if text in predefined.split():
-            return getattr(colors, text)
+            ret = getattr(colors, text)
         elif text == "currentColor":
-            return "currentColor"
+            ret = "currentColor"
         elif len(text) == 7 and text[0] == '#':
-            return colors.HexColor(text)
+            ret = colors.HexColor(text)
         elif len(text) == 4 and text[0] == '#':
-            return colors.HexColor('#' + 2*text[1] + 2*text[2] + 2*text[3])
+            ret = colors.HexColor('#' + 2*text[1] + 2*text[2] + 2*text[3])
         elif text[:3] == "rgb" and text.find('%') < 0:
             t = text[:][3:]
             t = t.replace('%', '')
@@ -387,19 +389,21 @@ class Svg2RlgAttributeConverter(AttributeConverter):
             tup = map(lambda h:h[2:], map(hex, tup))
             tup = map(lambda h:(2-len(h))*'0'+h, tup)
             col = "#%s%s%s" % tuple(tup)
-            return colors.HexColor(col)
+            ret = colors.HexColor(col)
         elif text[:3] == 'rgb' and text.find('%') >= 0:
             t = text[:][3:]
             t = t.replace('%', '')
             tup = eval(t)
             tup = map(lambda c:c/100.0, tup)
             col = apply(colors.Color, tup)
-            return col
+            ret = col
 
-        if LOGMESSAGES:
+        if ret is not None:
+            ret.alpha = alpha
+        elif LOGMESSAGES:
             print "Can't handle color:", text
 
-        return None
+        return ret
 
 
     def convertLineJoin(self, svgAttr):
@@ -1145,7 +1149,11 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                         if svgAttrValue == "currentColor":
                             svgAttrValue = ac.findAttr(node.parentNode, "color") or default
                         meth = getattr(ac, func)
-                        setattr(shape, rlgAttr, meth(svgAttrValue))
+                        value = meth(svgAttrValue)
+                        if svgAttrName in ("fill", "stroke") and svgAttrValue and (svgAttrValue != "none"):
+                            opacity = ac.findAttr(node, '%s-opacity' % svgAttrName) or u"1"
+                            value.alpha = max( 0, min( float(opacity), 1 ) )
+                        setattr(shape, rlgAttr, value)
                     except:
                         pass
 
