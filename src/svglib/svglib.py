@@ -869,6 +869,7 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
 
 
     def convertPath(self, node):
+        _MOVETO, _LINETO, _CURVETO, _CLOSEPATH = range(4)
         d = node.getAttribute('d')
         normPath = normaliseSvgPath(d)
         pts, ops = [], []
@@ -882,10 +883,11 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                 xn, yn = nums
                 pts = pts + [xn, yn]
                 if op == 'M': 
-                    ops.append(0)
+                    if ops: ops.append(_CLOSEPATH)
+                    ops.append(_MOVETO)
                     lastMoveToOp = (op, xn, yn)
                 elif op == 'L': 
-                    ops.append(1)
+                    ops.append(_LINETO)
 
             # moveto, lineto relative
             elif op == 'm':
@@ -900,11 +902,11 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                     lastMoveToOp = (op, pts[-2], pts[-1])
                 if not lastMoveToOp:
                     lastMoveToOp = (op, xn, yn)
-                ops.append(0)
+                ops.append(_MOVETO)
             elif op == 'l':
                 xn, yn = nums
                 pts = pts + [pts[-2]+xn] + [pts[-1]+yn]
-                ops.append(1)
+                ops.append(_LINETO)
 
             # horizontal/vertical line absolute
             elif op in ('H', 'V'):
@@ -913,7 +915,7 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                     pts = pts + [k] + [pts[-1]]
                 elif op == 'V':
                     pts = pts + [pts[-2]] + [k]
-                ops.append(1)
+                ops.append(_LINETO)
 
             # horizontal/vertical line relative
             elif op in ('h', 'v'):
@@ -922,33 +924,33 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                     pts = pts + [pts[-2]+k] + [pts[-1]]
                 elif op == 'v':
                     pts = pts + [pts[-2]] + [pts[-1]+k]
-                ops.append(1)
+                ops.append(_LINETO)
 
             # cubic bezier, absolute
             elif op == 'C':
                 x1, y1, x2, y2, xn, yn = nums
                 pts = pts + [x1, y1, x2, y2, xn, yn]
-                ops.append(2)
+                ops.append(_CURVETO)
             elif op == 'S':
                 x2, y2, xn, yn = nums
                 xp, yp, x0, y0 = pts[-4:]
                 xi, yi = x0+(x0-xp), y0+(y0-yp)
                 # pts = pts + [xcp2, ycp2, x2, y2, xn, yn]
                 pts = pts + [xi, yi, x2, y2, xn, yn]
-                ops.append(2)
+                ops.append(_CURVETO)
 
             # cubic bezier, relative
             elif op == 'c':
                 xp, yp = pts[-2:]
                 x1, y1, x2, y2, xn, yn = nums
                 pts = pts + [xp+x1, yp+y1, xp+x2, yp+y2, xp+xn, yp+yn]
-                ops.append(2)
+                ops.append(_CURVETO)
             elif op == 's':
                 xp, yp, x0, y0 = pts[-4:]
                 xi, yi = x0+(x0-xp), y0+(y0-yp)
                 x2, y2, xn, yn = nums
                 pts = pts + [xi, yi, x0+x2, y0+y2, x0+xn, y0+yn]
-                ops.append(2)
+                ops.append(_CURVETO)
 
             # quadratic bezier, absolute
             elif op == 'Q':
@@ -958,7 +960,7 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                 (x0,y0), (x1,y1), (x2,y2), (xn,yn) = \
                     convertQuadraticToCubicPath((x0,y0), (x1,y1), (xn,yn))
                 pts = pts + [x1,y1, x2,y2, xn,yn]
-                ops.append(2)
+                ops.append(_CURVETO)
             elif op == 'T':
                 xp, yp, x0, y0 = pts[-4:]
                 xi, yi = x0+(x0-xcp), y0+(y0-ycp)
@@ -967,7 +969,7 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                 (x0,y0), (x1,y1), (x2,y2), (xn,yn) = \
                     convertQuadraticToCubicPath((x0,y0), (xi,yi), (xn,yn))
                 pts = pts + [x1,y1, x2,y2, xn,yn]
-                ops.append(2)
+                ops.append(_CURVETO)
 
             # quadratic bezier, relative
             elif op == 'q':
@@ -978,7 +980,7 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                 (x0,y0), (x1,y1), (x2,y2), (xn,yn) = \
                     convertQuadraticToCubicPath((x0,y0), (x1,y1), (xn,yn))
                 pts = pts + [x1,y1, x2,y2, xn,yn]
-                ops.append(2)
+                ops.append(_CURVETO)
             elif op == 't':
                 x0, y0 = pts[-2:]
                 xn, yn = nums
@@ -988,11 +990,11 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                 (x0,y0), (x1,y1), (x2,y2), (xn,yn) = \
                     convertQuadraticToCubicPath((x0,y0), (xi,yi), (xn,yn))
                 pts = pts + [x1,y1, x2,y2, xn,yn]
-                ops.append(2)
+                ops.append(_CURVETO)
 
             # close path
             elif op in ('Z', 'z'):
-                ops.append(3)
+                ops.append(_CLOSEPATH)
 
             # arcs
             else: #if op in unhandledOps.keys():
@@ -1000,13 +1002,13 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                     print "Suspicious path operator:", op
                 if op in ('A', 'a'):
                     pts = pts + nums[-2:]
-                    ops.append(1)
+                    ops.append(_LINETO)
                     if LOGMESSAGES:
                         print "(Replaced with straight line)"
 
         # hack because RLG has no "semi-closed" paths...
         gr = Group()
-        if ops[-1] == 3:
+        if ops[-1] == _CLOSEPATH:
             shape1 = Path(pts, ops)
             self.applyStyleOnShape(shape1, node)
             fc = self.attrConverter.findAttr(node, "fill")
@@ -1017,7 +1019,7 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                 shape1.strokeColor = None
             gr.add(shape1)
         else:
-            shape1 = Path(pts, ops+[3])
+            shape1 = Path(pts, ops+[_CLOSEPATH])
             self.applyStyleOnShape(shape1, node)
             shape1.strokeColor = None
             fc = self.attrConverter.findAttr(node, "fill")
