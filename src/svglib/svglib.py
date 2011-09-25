@@ -24,6 +24,8 @@ import operator
 import gzip
 import xml.dom.minidom 
 
+from math import sqrt, sin, cos, atan2, pi
+
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.graphics.shapes import *
 from reportlab.graphics import renderPDF
@@ -183,6 +185,71 @@ def normaliseSvgPath(attr):
                 res[i] = 'l'
 
     return res
+
+
+def plot_arc( sx, sy, rx, ry, x_axis_rotation, large, sweep, x, y ):
+  th = x_axis_rotation * (pi / 180)
+  rx = abs( rx )
+  ry = abs( ry )
+
+  px = cos( th ) * (sx - x) * 0.5 + sin( th ) * (sy - y) * 0.5
+  py = cos( th ) * (sy - y) * 0.5 - sin( th ) * (sx - x) * 0.5
+  pl = ( px * px ) / ( rx * rx ) + ( py * py ) / ( ry * ry )
+  if ( pl > 1 ):
+    pl = sqrt( pl )
+    rx *= pl
+    ry *= pl
+
+  x0 = (  cos( th ) / rx ) * sx + ( sin( th ) / rx ) * sy
+  y0 = ( -sin( th ) / ry ) * sx + ( cos( th ) / ry ) * sy
+  x1 = (  cos( th ) / rx ) *  x + ( sin( th ) / rx ) *  y
+  y1 = ( -sin( th ) / ry ) *  x + ( cos( th ) / ry ) *  y
+
+  d = ( x1 - x0 ) * ( x1 - x0 ) + ( y1 - y0 ) * ( y1 - y0 )
+  sfactor_sq = 1 / d - 0.25
+  if ( sfactor_sq < 0 ): sfactor_sq = 0
+  sfactor = sqrt( sfactor_sq )
+  if ( sweep == large ): sfactor = -sfactor
+
+  xc = 0.5 * ( x0 + x1 ) - sfactor * ( y1 - y0 )
+  yc = 0.5 * ( y0 + y1 ) + sfactor * ( x1 - x0 )
+
+  th0 = atan2( y0 - yc, x0 - xc )
+  th1 = atan2( y1 - yc, x1 - xc )
+
+  cx = ( sx + x ) / 2
+  cy = ( sy + y ) / 2
+
+  adx = -cos( th1 ) * rx
+  ady = -sin( th1 ) * ry
+
+  degreedelta = 1
+  startangle  = th0 if sweep else th1
+  endangle    = th1 if sweep else th0
+
+  while ( endangle < startangle ):
+    endangle = endangle + 2 * pi
+
+  angle = endangle - startangle
+
+  n = 1
+  rdelta = 0
+  if angle > 0.001:
+    degreedelta = min( angle, degreedelta or 1 )
+    rdelta = degreedelta * (pi / 180)
+    n = max( int( angle / rdelta + 0.5 ), 1 )
+    rdelta = angle / n
+    n += 1
+
+  points = [];
+  for i in xrange(n):
+    angle = startangle + i * rdelta
+    points.append([
+      x + adx + rx * cos(angle),
+      y + ady + ry * sin(angle)
+    ])
+
+  return points
 
 
 ### attribute converters (from SVG to RLG)
@@ -974,6 +1041,13 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                     convertQuadraticToCubicPath((x0,y0), (xi,yi), (xn,yn))
                 pts = pts + [x1,y1, x2,y2, xn,yn]
                 ops.append(_CURVETO)
+
+            # elliptical arc, absolute
+            elif op == 'A':
+                points = plot_arc( *pts[-2:]+nums )
+                for ax, ay in points:
+                    pts = pts + [ax, ay]
+                    ops.append(_LINETO)
 
             # quadratic bezier, relative
             elif op == 'q':
