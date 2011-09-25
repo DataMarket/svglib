@@ -838,7 +838,7 @@ class Svg2RlgShapeConverter(SvgShapeConverter):
                 text = c.nodeValue
 
             elif c.nodeType == c.ELEMENT_NODE and c.nodeName == "tspan":
-                text = c.firstChild.nodeValue
+                text = c.firstChild.nodeValue if c.firstChild else u''
                 y = attrConv.convertLength( c.getAttribute('y'), emSize=fsize )
                 x = attrConv.convertLength( c.getAttribute('x'), emSize=fsize )
                 dx += attrConv.convertLength( c.getAttribute('dx'), emSize=fsize )
